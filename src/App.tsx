@@ -33,7 +33,7 @@ const PREDEFINED_POINTS: PredefinedPoint[] = [
 interface Module {
   id: string;
   name: string;
-  type: 'main' | 'relay' | 'mcb' | 'rcbo';
+  type: 'main' | 'relay' | 'mcb' | 'rcbo' | 'rccb';
   amperage: number;
   poles: number;
   modulesCount: number;
@@ -51,27 +51,37 @@ const getBreakerAmperage = (powerKw: number, type: PointType) => {
   return recommended;
 };
 
-function generateModules(groups: (PredefinedPoint & { instanceId: string })[], includeRelay: boolean, diversityFactor: number): Module[] {
-  const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
-  const totalAmps = (totalPowerKw * 1000) / 230;
-  
-  const designAmps = totalAmps > 0 ? Math.max(totalAmps * diversityFactor, 25) : 25; 
-  const mainSizes = [25, 32, 40, 50, 63];
-  let mainAmperage = mainSizes.find(s => s >= designAmps) || 63;
-  if (groups.length === 0) mainAmperage = 63;
-
+function generateModules(
+  groups: (PredefinedPoint & { instanceId: string })[], 
+  includeRelay: boolean, 
+  mainProtection: 'mcb' | 'rcbo' | 'mcb_rccb',
+  mainAmperage: number
+): Module[] {
   const modules: Module[] = [];
   
-  modules.push({
-    id: 'main',
-    name: 'მთავარი ამომრთველი',
-    type: 'main',
-    amperage: mainAmperage,
-    poles: 2,
-    modulesCount: 2,
-    productId: `main-mcb-${mainAmperage}a-2p`,
-    description: `2-პოლუსიანი შემყვანი ავტომატი ${mainAmperage}A`
-  });
+  if (mainProtection === 'rcbo') {
+    modules.push({
+      id: 'main',
+      name: 'მთავარი დიფ. ავტომატი',
+      type: 'rcbo',
+      amperage: mainAmperage,
+      poles: 2,
+      modulesCount: 2,
+      productId: `main-rcbo-${mainAmperage}a-2p`,
+      description: `2-პოლუსიანი შემყვანი დიფ. ავტომატი ${mainAmperage}A`
+    });
+  } else {
+    modules.push({
+      id: 'main',
+      name: 'მთავარი ამომრთველი',
+      type: 'main',
+      amperage: mainAmperage,
+      poles: 2,
+      modulesCount: 2,
+      productId: `main-mcb-${mainAmperage}a-2p`,
+      description: `2-პოლუსიანი შემყვანი ავტომატი ${mainAmperage}A`
+    });
+  }
 
   if (includeRelay) {
     const relayAmperage = mainAmperage <= 40 ? 40 : 63;
@@ -84,6 +94,19 @@ function generateModules(groups: (PredefinedPoint & { instanceId: string })[], i
       modulesCount: 2,
       productId: `voltage-relay-${relayAmperage}a`,
       description: `ძაბვის დამცავი რელე ${relayAmperage}A`
+    });
+  }
+
+  if (mainProtection === 'mcb_rccb') {
+    modules.push({
+      id: 'rccb',
+      name: 'გაჟონვის რელე',
+      type: 'rccb',
+      amperage: 63,
+      poles: 2,
+      modulesCount: 2,
+      productId: 'rccb-63a-2p-30ma',
+      description: 'გაჟონვის რელე (RCCB) 63A 30mA'
     });
   }
 
@@ -118,12 +141,24 @@ function generateModules(groups: (PredefinedPoint & { instanceId: string })[], i
   return modules;
 }
 
-const ModuleBlock = ({ module }: { module: Module }) => {
+const ModuleBlock = ({ 
+  module, 
+  onDragStart, 
+  onDrop, 
+  onDragOver 
+}: { 
+  module: Module;
+  onDragStart?: (e: React.DragEvent, id: string) => void;
+  onDrop?: (e: React.DragEvent, id: string) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+}) => {
   const width = module.modulesCount * 44; // 44px per module
   
   const isDiff = module.type === 'rcbo';
   const isMain = module.type === 'main';
   const isRelay = module.type === 'relay';
+  const isRccb = module.type === 'rccb';
+  const isFixed = ['main', 'relay', 'rccb'].includes(module.id);
 
   let bgColor = 'bg-[#141414]';
   let borderColor = 'border-[#2a2a2a]';
@@ -145,11 +180,20 @@ const ModuleBlock = ({ module }: { module: Module }) => {
     accentColor = 'bg-orange-500';
     bgColor = 'bg-[#1a100a]';
     textColor = 'text-orange-200';
+  } else if (isRccb) {
+    borderColor = 'border-purple-500/40';
+    accentColor = 'bg-purple-500';
+    bgColor = 'bg-[#150a1a]';
+    textColor = 'text-purple-200';
   }
 
   return (
     <div 
-      className={`relative flex flex-col items-center justify-between h-36 border ${borderColor} ${bgColor} rounded-md shadow-lg transition-all hover:border-opacity-100`}
+      draggable={!isFixed}
+      onDragStart={(e) => { if (!isFixed && onDragStart) onDragStart(e, module.id); }}
+      onDrop={(e) => { if (!isFixed && onDrop) onDrop(e, module.id); }}
+      onDragOver={(e) => { if (!isFixed) { e.preventDefault(); if (onDragOver) onDragOver(e); } }}
+      className={`relative flex flex-col items-center justify-between h-36 border ${borderColor} ${bgColor} rounded-md shadow-lg transition-all hover:border-opacity-100 ${!isFixed ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}`}
       style={{ width: `${width}px` }}
       title={module.description}
     >
@@ -171,6 +215,19 @@ export default function App() {
   const [groups, setGroups] = useState<(PredefinedPoint & { instanceId: string })[]>([]);
   const [includeRelay, setIncludeRelay] = useState(true);
   const [diversityFactor, setDiversityFactor] = useState(0.8);
+  const [mainProtection, setMainProtection] = useState<'mcb' | 'rcbo' | 'mcb_rccb'>('mcb');
+
+  const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
+  const designPowerKw = totalPowerKw * diversityFactor;
+  const isOverLimit = designPowerKw > 10;
+  
+  const totalAmps = (totalPowerKw * 1000) / 230;
+  const designAmps = totalAmps > 0 ? Math.max(totalAmps * diversityFactor, 25) : 25; 
+  const mainSizes = [25, 32, 40, 50, 63];
+  let calculatedMainAmperage = mainSizes.find(s => s >= designAmps) || 63;
+  if (groups.length === 0) calculatedMainAmperage = 63;
+
+  const effectiveMainProtection = (mainProtection === 'rcbo' && calculatedMainAmperage > 40) ? 'mcb' : mainProtection;
 
   const addGroup = (point: PredefinedPoint) => {
     const count = groups.filter(g => g.id === point.id).length;
@@ -186,15 +243,31 @@ export default function App() {
     setGroups(groups.map(g => g.instanceId === instanceId ? { ...g, ...updates } : g));
   };
 
-  const modules = useMemo(() => generateModules(groups, includeRelay, diversityFactor), [groups, includeRelay, diversityFactor]);
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (draggedId === targetId) return;
+
+    const draggedIndex = groups.findIndex(g => g.instanceId === draggedId);
+    const targetIndex = groups.findIndex(g => g.instanceId === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newGroups = [...groups];
+    const [draggedItem] = newGroups.splice(draggedIndex, 1);
+    newGroups.splice(targetIndex, 0, draggedItem);
+    setGroups(newGroups);
+  };
+
+  const modules = useMemo(() => generateModules(groups, includeRelay, effectiveMainProtection, calculatedMainAmperage), [groups, includeRelay, effectiveMainProtection, calculatedMainAmperage]);
   const totalModulesCount = modules.reduce((sum, m) => sum + m.modulesCount, 0);
   
   const boardSizes = [8, 12, 18, 24, 36, 48, 72];
   const recommendedSize = boardSizes.find(s => s >= totalModulesCount) || 72;
-
-  const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
-  const designPowerKw = totalPowerKw * diversityFactor;
-  const isOverLimit = designPowerKw > 10;
 
   // Shopify Configuration
   const SHOPIFY_DOMAIN = 'poweron.ge'; // TODO: შეცვალეთ თქვენი მაღაზიის დომენით
@@ -206,6 +279,10 @@ export default function App() {
     'main-mcb-40a-2p': '46062741618936',
     'main-mcb-32a-2p': '46062741487864',
     'main-mcb-25a-2p': '46062741356792',
+    'main-rcbo-40a-2p': 'TODO_RCBO_40A', // TODO: ჩაანაცვლეთ რეალური ID-ით
+    'main-rcbo-32a-2p': 'TODO_RCBO_32A', // TODO: ჩაანაცვლეთ რეალური ID-ით
+    'main-rcbo-25a-2p': 'TODO_RCBO_25A', // TODO: ჩაანაცვლეთ რეალური ID-ით
+    'rccb-63a-2p-30ma': '46065226940664',
     'voltage-relay-63a': '45888242123000',
     'voltage-relay-40a': '45888210698488',
     'mcb-10a-1p-c': '46062740537592',
@@ -326,7 +403,12 @@ export default function App() {
                 
                 <div className="relative z-10 flex gap-[1px]">
                   {row.map((m, i) => (
-                    <ModuleBlock key={`${m.id}_${i}`} module={m} />
+                    <ModuleBlock 
+                      key={`${m.id}_${i}`} 
+                      module={m} 
+                      onDragStart={handleDragStart}
+                      onDrop={handleDrop}
+                    />
                   ))}
                 </div>
               </div>
@@ -392,6 +474,24 @@ export default function App() {
                 className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
               />
               <div className="text-[10px] text-zinc-500 mt-2">განსაზღვრავს ერთდროულად ჩართული ტექნიკის ალბათობას</div>
+            </div>
+
+            <div className="bg-[#141414] border border-[#1a1a1a] rounded-xl p-4">
+              <div className="text-sm font-medium text-zinc-200 mb-3">მთავარი დაცვა</div>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input type="radio" name="mainProt" checked={mainProtection === 'mcb'} onChange={() => setMainProtection('mcb')} className="accent-[#00ff88] w-4 h-4" />
+                  <span className="text-xs text-zinc-300 group-hover:text-white transition-colors">სტანდარტული (MCB)</span>
+                </label>
+                <label className={`flex items-center gap-2 ${calculatedMainAmperage > 40 ? 'cursor-not-allowed opacity-50' : 'cursor-pointer group'}`}>
+                  <input type="radio" name="mainProt" checked={mainProtection === 'rcbo'} onChange={() => setMainProtection('rcbo')} disabled={calculatedMainAmperage > 40} className="accent-[#00ff88] w-4 h-4 disabled:accent-zinc-600" />
+                  <span className="text-xs text-zinc-300 group-hover:text-white transition-colors">დიფ. ავტომატი (RCBO) {calculatedMainAmperage > 40 && '- max 40A'}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <input type="radio" name="mainProt" checked={mainProtection === 'mcb_rccb'} onChange={() => setMainProtection('mcb_rccb')} className="accent-[#00ff88] w-4 h-4" />
+                  <span className="text-xs text-zinc-300 group-hover:text-white transition-colors">MCB + გაჟონვის რელე (RCCB)</span>
+                </label>
+              </div>
             </div>
 
             {isOverLimit && (
