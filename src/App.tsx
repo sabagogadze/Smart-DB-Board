@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Lightbulb, Plug, Wind, ChefHat, WashingMachine, 
   Utensils, Bath, TreePine, Coffee, Plus, Trash2, 
-  Zap, Shield, Info, ShoppingCart
+  Zap, Shield, Info, ShoppingCart, Flame
 } from 'lucide-react';
 
 type PointType = 'lighting' | 'socket' | 'appliance';
@@ -27,6 +27,7 @@ const PREDEFINED_POINTS: PredefinedPoint[] = [
   { id: 'bathroom', name: 'აბაზანა', powerKw: 2.0, type: 'socket', isWet: true, isDedicated: true, icon: Bath },
   { id: 'outdoor', name: 'გარე პერიმეტრი', powerKw: 1.0, type: 'socket', isWet: true, isDedicated: true, icon: TreePine },
   { id: 'kettle', name: 'ჩაიდანი', powerKw: 2.0, type: 'appliance', isWet: false, isDedicated: false, icon: Coffee },
+  { id: 'boiler', name: 'გათბობის ქვაბი', powerKw: 2.0, type: 'appliance', isWet: true, isDedicated: true, icon: Flame },
 ];
 
 interface Module {
@@ -50,11 +51,11 @@ const getBreakerAmperage = (powerKw: number, type: PointType) => {
   return recommended;
 };
 
-function generateModules(groups: (PredefinedPoint & { instanceId: string })[], includeRelay: boolean): Module[] {
+function generateModules(groups: (PredefinedPoint & { instanceId: string })[], includeRelay: boolean, diversityFactor: number): Module[] {
   const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
   const totalAmps = (totalPowerKw * 1000) / 230;
-  // Apply a diversity factor of 0.8 for the main breaker, minimum 25A
-  const designAmps = totalAmps > 0 ? Math.max(totalAmps * 0.8, 25) : 25; 
+  
+  const designAmps = totalAmps > 0 ? Math.max(totalAmps * diversityFactor, 25) : 25; 
   const mainSizes = [25, 32, 40, 50, 63];
   let mainAmperage = mainSizes.find(s => s >= designAmps) || 63;
   if (groups.length === 0) mainAmperage = 63;
@@ -169,6 +170,7 @@ const ModuleBlock = ({ module }: { module: Module }) => {
 export default function App() {
   const [groups, setGroups] = useState<(PredefinedPoint & { instanceId: string })[]>([]);
   const [includeRelay, setIncludeRelay] = useState(true);
+  const [diversityFactor, setDiversityFactor] = useState(0.8);
 
   const addGroup = (point: PredefinedPoint) => {
     const count = groups.filter(g => g.id === point.id).length;
@@ -184,11 +186,15 @@ export default function App() {
     setGroups(groups.map(g => g.instanceId === instanceId ? { ...g, ...updates } : g));
   };
 
-  const modules = useMemo(() => generateModules(groups, includeRelay), [groups, includeRelay]);
+  const modules = useMemo(() => generateModules(groups, includeRelay, diversityFactor), [groups, includeRelay, diversityFactor]);
   const totalModulesCount = modules.reduce((sum, m) => sum + m.modulesCount, 0);
   
   const boardSizes = [8, 12, 18, 24, 36, 48, 72];
   const recommendedSize = boardSizes.find(s => s >= totalModulesCount) || 72;
+
+  const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
+  const designPowerKw = totalPowerKw * diversityFactor;
+  const isOverLimit = designPowerKw > 10;
 
   // Shopify Configuration
   const SHOPIFY_DOMAIN = 'poweron.ge'; // TODO: შეცვალეთ თქვენი მაღაზიის დომენით
@@ -278,7 +284,7 @@ export default function App() {
         </div>
         
         <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 px-2">წერტილების დამატება</h2>
+          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 px-2">ჯგუფების დამატება</h2>
           {PREDEFINED_POINTS.map(point => (
             <button
               key={point.id}
@@ -349,25 +355,53 @@ export default function App() {
           </div>
 
           {/* Options */}
-          <div className="bg-[#141414] border border-[#1a1a1a] rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-orange-500/10 text-orange-400">
-                <Zap className="w-4 h-4" />
+          <div className="space-y-4">
+            <div className="bg-[#141414] border border-[#1a1a1a] rounded-xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-orange-500/10 text-orange-400">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-zinc-200">ძაბვის რელე</div>
+                  <div className="text-[10px] text-zinc-500">იცავს ტექნიკას ძაბვის ცვალებადობისგან</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-medium text-zinc-200">ძაბვის რელე</div>
-                <div className="text-[10px] text-zinc-500">იცავს ტექნიკას ძაბვის ცვალებადობისგან</div>
-              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={includeRelay}
+                  onChange={(e) => setIncludeRelay(e.target.checked)}
+                />
+                <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#00ff88]"></div>
+              </label>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+
+            <div className="bg-[#141414] border border-[#1a1a1a] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-zinc-200">ერთდროულობის კოეფიციენტი</div>
+                <div className="text-sm font-mono text-[#00ff88]">{diversityFactor.toFixed(2)}</div>
+              </div>
               <input 
-                type="checkbox" 
-                className="sr-only peer" 
-                checked={includeRelay}
-                onChange={(e) => setIncludeRelay(e.target.checked)}
+                type="range" 
+                min="0.4" 
+                max="1.0" 
+                step="0.05" 
+                value={diversityFactor}
+                onChange={(e) => setDiversityFactor(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-[#00ff88]"
               />
-              <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#00ff88]"></div>
-            </label>
+              <div className="text-[10px] text-zinc-500 mt-2">განსაზღვრავს ერთდროულად ჩართული ტექნიკის ალბათობას</div>
+            </div>
+
+            {isOverLimit && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex gap-3">
+                <Info className="w-5 h-5 text-red-400 shrink-0" />
+                <div className="text-xs text-red-200/90 leading-relaxed">
+                  ყურადღება: თქვენი საანგარიშო სიმძლავრე ({designPowerKw.toFixed(1)} kW) აჭარბებს დისტრიბუტორის მიერ მოწოდებულ 10 kW-ს. გთხოვთ, შეამციროთ დატვირთვა ან მოითხოვოთ სიმძლავრის გაზრდა.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Selected Points List */}
