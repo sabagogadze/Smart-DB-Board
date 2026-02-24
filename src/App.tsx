@@ -197,18 +197,58 @@ export default function App() {
     return sum + 12;
   }, 0);
 
+  // Shopify Configuration
+  const SHOPIFY_DOMAIN = 'poweron.ge'; // TODO: შეცვალეთ თქვენი მაღაზიის დომენით
+  
+  // რეალური Variant ID-ები
+  const SHOPIFY_VARIANT_MAP: Record<string, string> = {
+    'main-mcb-63a-2p': '46062741881080',
+    'main-mcb-50a-2p': '46062741717240',
+    'main-mcb-40a-2p': '46062741618936',
+    'main-mcb-32a-2p': '46062741487864',
+    'main-mcb-25a-2p': '46062741356792',
+    'voltage-relay-63a': '45888242123000',
+    'voltage-relay-40a': '45888210698488',
+    'mcb-10a-1p-c': '46062740537592',
+    'mcb-16a-1p-c': '46062740668664',
+    'mcb-20a-1p-c': '46062740734200',
+    'mcb-25a-1p-c': '46062740799736',
+    'mcb-32a-1p-c': '46062740930808',
+    'mcb-40a-1p-c': '46062741029112',
+    'rcbo-10a-30ma-c': '46064925409528', // TODO: ჩაანაცვლეთ 10A დიფ-ავტომატის რეალური ID-ით
+    'rcbo-16a-30ma-c': '46064925475064',
+    'rcbo-20a-30ma-c': '46064925606136',
+    'rcbo-25a-30ma-c': '46064925671672',
+    'rcbo-32a-30ma-c': '46064925802744',
+    'rcbo-40a-30ma-c': '46064925901048',
+  };
+
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+
   const handleCheckout = () => {
-    const checkoutData = {
-      modules: modules.map(m => ({
-        productId: m.productId,
-        quantity: 1,
-        name: m.name
-      })),
-      recommendedBoardSize: recommendedSize,
-      totalPrice
-    };
-    console.log("Checkout Data (JSON):", JSON.stringify(checkoutData, null, 2));
-    alert("კოდი დაგენერირებულია! იხილეთ კონსოლი (F12) JSON ფორმატისთვის.");
+    // 1. დავაჯგუფოთ მოდულები და დავითვალოთ რაოდენობა
+    const cartItems: Record<string, number> = {};
+    
+    modules.forEach(m => {
+      const variantId = SHOPIFY_VARIANT_MAP[m.productId];
+      if (variantId) {
+        cartItems[variantId] = (cartItems[variantId] || 0) + 1;
+      } else {
+        console.warn(`Variant ID ვერ მოიძებნა პროდუქტისთვის: ${m.productId}`);
+      }
+    });
+
+    // 2. შევქმნათ Shopify Permalink (ფორმატი: variant_id:quantity,variant_id:quantity)
+    const itemsString = Object.entries(cartItems)
+      .map(([id, qty]) => `${id}:${qty}`)
+      .join(',');
+
+    if (itemsString) {
+      const url = `https://${SHOPIFY_DOMAIN}/cart/${itemsString}`;
+      setCheckoutUrl(url);
+    } else {
+      alert("კალათა ცარიელია ან პროდუქტების Variant ID-ები არ არის მითითებული კოდში.");
+    }
   };
 
   // Chunk modules into rows of max 12 modules
@@ -424,6 +464,38 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Checkout Modal */}
+      {checkoutUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-[#00ff88]/10 rounded-full flex items-center justify-center mb-6">
+              <ShoppingCart className="w-8 h-8 text-[#00ff88]" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">კალათა მზადაა!</h3>
+            <p className="text-zinc-400 mb-8 text-sm leading-relaxed">
+              თქვენი ელექტრო ფარის კონფიგურაცია წარმატებით შეიქმნა. დააჭირეთ ქვემოთ მოცემულ ღილაკს, რათა გადახვიდეთ Shopify-ს კალათაში და დაასრულოთ შეკვეთა.
+            </p>
+            <div className="flex flex-col gap-3 w-full">
+              <a 
+                href={checkoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setCheckoutUrl(null)}
+                className="w-full bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold py-4 rounded-xl flex items-center justify-center transition-colors"
+              >
+                გადასვლა გადახდაზე
+              </a>
+              <button 
+                onClick={() => setCheckoutUrl(null)}
+                className="w-full bg-transparent border border-zinc-700 hover:border-zinc-500 text-zinc-300 font-medium py-4 rounded-xl transition-colors"
+              >
+                გაუქმება
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
