@@ -190,13 +190,6 @@ export default function App() {
   const boardSizes = [8, 12, 18, 24, 36, 48, 72];
   const recommendedSize = boardSizes.find(s => s >= totalModulesCount) || 72;
 
-  const totalPrice = modules.reduce((sum, m) => {
-    if (m.type === 'main') return sum + 45;
-    if (m.type === 'relay') return sum + 85;
-    if (m.type === 'rcbo') return sum + 65;
-    return sum + 12;
-  }, 0);
-
   // Shopify Configuration
   const SHOPIFY_DOMAIN = 'poweron.ge'; // TODO: შეცვალეთ თქვენი მაღაზიის დომენით
   
@@ -451,10 +444,6 @@ export default function App() {
 
         {/* Checkout Footer */}
         <div className="p-6 border-t border-[#1a1a1a] bg-[#0a0a0a]">
-          <div className="flex items-end justify-between mb-4">
-            <div className="text-sm text-zinc-500">ჯამური ფასი</div>
-            <div className="text-3xl font-mono text-white">₾{totalPrice}</div>
-          </div>
           <button 
             onClick={handleCheckout}
             className="w-full bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors"
