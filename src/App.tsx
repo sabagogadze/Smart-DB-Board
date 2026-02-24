@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { 
   Lightbulb, Plug, Wind, ChefHat, WashingMachine, 
   Utensils, Bath, TreePine, Coffee, Plus, Trash2, 
-  Zap, Shield, Info, ShoppingCart, Flame
+  Zap, Shield, Info, ShoppingCart, Flame,
+  ChevronUp, ChevronDown, List, X
 } from 'lucide-react';
 
 type PointType = 'lighting' | 'socket' | 'appliance';
@@ -216,6 +217,8 @@ export default function App() {
   const [includeRelay, setIncludeRelay] = useState(true);
   const [diversityFactor, setDiversityFactor] = useState(0.8);
   const [mainProtection, setMainProtection] = useState<'mcb' | 'rcbo' | 'mcb_rccb'>('mcb');
+  const [showBom, setShowBom] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
   const designPowerKw = totalPowerKw * diversityFactor;
@@ -263,11 +266,35 @@ export default function App() {
     setGroups(newGroups);
   };
 
+  const moveGroup = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index > 0) {
+      const newGroups = [...groups];
+      [newGroups[index - 1], newGroups[index]] = [newGroups[index], newGroups[index - 1]];
+      setGroups(newGroups);
+    } else if (direction === 'down' && index < groups.length - 1) {
+      const newGroups = [...groups];
+      [newGroups[index + 1], newGroups[index]] = [newGroups[index], newGroups[index + 1]];
+      setGroups(newGroups);
+    }
+  };
+
   const modules = useMemo(() => generateModules(groups, includeRelay, effectiveMainProtection, calculatedMainAmperage), [groups, includeRelay, effectiveMainProtection, calculatedMainAmperage]);
   const totalModulesCount = modules.reduce((sum, m) => sum + m.modulesCount, 0);
   
   const boardSizes = [8, 12, 18, 24, 36, 48, 72];
   const recommendedSize = boardSizes.find(s => s >= totalModulesCount) || 72;
+
+  const bomItems = useMemo(() => {
+    const items: Record<string, { name: string, quantity: number, description: string }> = {};
+    modules.forEach(m => {
+      if (items[m.productId]) {
+        items[m.productId].quantity += 1;
+      } else {
+        items[m.productId] = { name: m.name, quantity: 1, description: m.description };
+      }
+    });
+    return Object.values(items);
+  }, [modules]);
 
   // Shopify Configuration
   const SHOPIFY_DOMAIN = 'poweron.ge'; // TODO: შეცვალეთ თქვენი მაღაზიის დომენით
@@ -298,8 +325,6 @@ export default function App() {
     'rcbo-32a-30ma-c': '46064925802744',
     'rcbo-40a-30ma-c': '46064925901048',
   };
-
-  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const handleCheckout = () => {
     // 1. დავაჯგუფოთ მოდულები და დავითვალოთ რაოდენობა
@@ -348,20 +373,20 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:flex-row overflow-hidden">
+    <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:flex-row md:overflow-hidden">
       
       {/* Left Sidebar - Points Selection */}
-      <div className="w-full md:w-80 bg-[#0d0d0d] border-r border-[#1a1a1a] flex flex-col h-screen shrink-0">
-        <div className="p-6 border-b border-[#1a1a1a]">
-          <div className="flex items-center gap-3 mb-2">
-            <Zap className="text-[#00ff88] w-6 h-6" />
-            <h1 className="text-xl font-bold tracking-tight text-white">Poweron.ge</h1>
+      <div className="w-full md:w-80 bg-[#0d0d0d] border-b md:border-b-0 md:border-r border-[#1a1a1a] flex flex-col md:h-screen shrink-0">
+        <div className="p-4 md:p-6 border-b border-[#1a1a1a]">
+          <div className="flex items-center gap-3 mb-1 md:mb-2">
+            <Zap className="text-[#00ff88] w-5 h-5 md:w-6 md:h-6" />
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-white">Poweron.ge</h1>
           </div>
-          <p className="text-sm text-zinc-400">Smart DB Configurator</p>
+          <p className="text-xs md:text-sm text-zinc-400">Smart DB Configurator</p>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 px-2">ჯგუფების დამატება</h2>
+        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 custom-scrollbar max-h-[35vh] md:max-h-none">
+          <h2 className="text-[10px] md:text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 md:mb-4 px-2">ჯგუფების დამატება</h2>
           {PREDEFINED_POINTS.map(point => (
             <button
               key={point.id}
@@ -384,46 +409,48 @@ export default function App() {
       </div>
 
       {/* Center - Visual Board */}
-      <div className="flex-1 flex flex-col h-screen relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111] via-[#080808] to-[#050505]">
-        <div className="p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
-          <h2 className="text-lg font-medium text-zinc-200">ვიზუალური ფარი</h2>
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <Shield className="w-4 h-4 text-[#00ff88]" />
+      <div className="w-full md:flex-1 flex flex-col md:h-screen relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111] via-[#080808] to-[#050505]">
+        <div className="p-4 md:p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
+          <h2 className="text-base md:text-lg font-medium text-zinc-200">ვიზუალური ფარი</h2>
+          <div className="flex items-center gap-2 text-xs md:text-sm text-zinc-400">
+            <Shield className="w-3 h-3 md:w-4 md:h-4 text-[#00ff88]" />
             <span>Type C დაცვა</span>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 flex items-start justify-center custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 flex items-start justify-center custom-scrollbar min-h-[40vh] md:min-h-0">
           {/* DIN Rail Container */}
-          <div className="w-full max-w-3xl bg-[#0d0d0d] border border-[#1a1a1a] rounded-2xl p-8 shadow-2xl">
-            {rows.map((row, rowIndex) => (
-              <div key={rowIndex} className="relative flex justify-center w-full mb-8 last:mb-0">
-                {/* DIN Rail Background Line for this row */}
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-4 bg-zinc-800/50 border-y border-zinc-700/50 rounded-sm z-0" />
-                
-                <div className="relative z-10 flex gap-[1px]">
-                  {row.map((m, i) => (
-                    <ModuleBlock 
-                      key={`${m.id}_${i}`} 
-                      module={m} 
-                      onDragStart={handleDragStart}
-                      onDrop={handleDrop}
-                    />
-                  ))}
+          <div className="w-full overflow-x-auto custom-scrollbar pb-6">
+            <div className="min-w-max bg-[#0d0d0d] border border-[#1a1a1a] rounded-2xl p-6 md:p-8 shadow-2xl mx-auto">
+              {rows.map((row, rowIndex) => (
+                <div key={rowIndex} className="relative flex justify-center w-full mb-8 last:mb-0">
+                  {/* DIN Rail Background Line for this row */}
+                  <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-4 bg-zinc-800/50 border-y border-zinc-700/50 rounded-sm z-0" />
+                  
+                  <div className="relative z-10 flex gap-[1px]">
+                    {row.map((m, i) => (
+                      <ModuleBlock 
+                        key={`${m.id}_${i}`} 
+                        module={m} 
+                        onDragStart={handleDragStart}
+                        onDrop={handleDrop}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Right Sidebar - Summary */}
-      <div className="w-full md:w-96 bg-[#0d0d0d] border-l border-[#1a1a1a] flex flex-col h-screen shrink-0">
-        <div className="p-6 border-b border-[#1a1a1a]">
-          <h2 className="text-lg font-medium text-zinc-200">სპეციფიკაცია</h2>
+      <div className="w-full md:w-96 bg-[#0d0d0d] border-t md:border-t-0 md:border-l border-[#1a1a1a] flex flex-col md:h-screen shrink-0">
+        <div className="p-4 md:p-6 border-b border-[#1a1a1a]">
+          <h2 className="text-base md:text-lg font-medium text-zinc-200">სპეციფიკაცია</h2>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar">
           {/* Stats */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#141414] border border-[#1a1a1a] rounded-xl p-4">
@@ -514,7 +541,7 @@ export default function App() {
               {groups.length === 0 ? (
                 <div className="text-sm text-zinc-600 italic text-center py-4">ჯერ არ დაგიმატებიათ ჯგუფები</div>
               ) : (
-                groups.map(g => (
+                groups.map((g, index) => (
                   <div key={g.instanceId} className="bg-[#141414] border border-[#1a1a1a] rounded-lg p-3 group-item">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2 w-full pr-2">
@@ -526,12 +553,30 @@ export default function App() {
                           className="bg-transparent border-b border-transparent hover:border-zinc-700 focus:border-[#00ff88] outline-none text-sm text-zinc-200 w-full transition-colors pb-0.5"
                         />
                       </div>
-                      <button 
-                        onClick={() => removeGroup(g.instanceId)}
-                        className="text-zinc-600 hover:text-red-400 transition-colors p-1 shrink-0"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex flex-col">
+                          <button 
+                            onClick={() => moveGroup(index, 'up')} 
+                            disabled={index === 0} 
+                            className="text-zinc-600 hover:text-white disabled:opacity-30 p-0.5"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => moveGroup(index, 'down')} 
+                            disabled={index === groups.length - 1} 
+                            className="text-zinc-600 hover:text-white disabled:opacity-30 p-0.5"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <button 
+                          onClick={() => removeGroup(g.instanceId)}
+                          className="text-zinc-600 hover:text-red-400 transition-colors p-2"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between pl-6">
                       <div className="flex items-center gap-2">
@@ -577,7 +622,14 @@ export default function App() {
         </div>
 
         {/* Checkout Footer */}
-        <div className="p-6 border-t border-[#1a1a1a] bg-[#0a0a0a]">
+        <div className="p-4 md:p-6 border-t border-[#1a1a1a] bg-[#0a0a0a] flex flex-col gap-3">
+          <button 
+            onClick={() => setShowBom(true)}
+            className="w-full bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+          >
+            <List className="w-4 h-4" />
+            <span>მასალების სია (BOM)</span>
+          </button>
           <button 
             onClick={handleCheckout}
             className="w-full bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors"
@@ -587,6 +639,55 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* BOM Modal */}
+      {showBom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 md:p-6 max-w-2xl w-full shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <List className="w-5 h-5 text-[#00ff88]" />
+                მასალების სია (BOM)
+              </h3>
+              <button onClick={() => setShowBom(false)} className="text-zinc-500 hover:text-white p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs md:text-sm text-zinc-400 min-w-[400px]">
+                  <thead className="text-[10px] md:text-xs text-zinc-500 uppercase bg-[#1a1a1a] sticky top-0">
+                    <tr>
+                      <th className="px-3 md:px-4 py-3 rounded-tl-lg">დასახელება</th>
+                      <th className="px-3 md:px-4 py-3">აღწერილობა</th>
+                      <th className="px-3 md:px-4 py-3 text-center rounded-tr-lg">რაოდენობა</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bomItems.map((item, idx) => (
+                      <tr key={idx} className="border-b border-[#1a1a1a] last:border-0 hover:bg-[#1a1a1a]/50">
+                        <td className="px-3 md:px-4 py-3 font-medium text-zinc-200">{item.name}</td>
+                        <td className="px-3 md:px-4 py-3 text-[10px] md:text-xs">{item.description}</td>
+                        <td className="px-3 md:px-4 py-3 text-center font-mono text-[#00ff88]">{item.quantity} ც</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div className="mt-4 md:mt-6 pt-4 border-t border-[#1a1a1a] flex justify-end">
+              <button 
+                onClick={() => setShowBom(false)}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-lg transition-colors text-sm"
+              >
+                დახურვა
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Checkout Modal */}
       {checkoutUrl && (
