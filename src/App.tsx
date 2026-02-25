@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Lightbulb, Plug, Wind, ChefHat, WashingMachine, 
   Utensils, Bath, TreePine, Coffee, Plus, Trash2, 
   Zap, Shield, Info, ShoppingCart, Flame,
   ChevronUp, ChevronDown, List, X,
   Sofa, BedDouble, Home, LayoutDashboard, Settings2, Minus,
-  GitMerge
+  GitMerge, Share2, Printer, Check
 } from 'lucide-react';
 
 type PointType = 'lighting' | 'socket' | 'appliance';
@@ -86,6 +86,15 @@ const getBreakerAmperage = (powerKw: number, type: PointType) => {
   if (type === 'socket' && recommended < 16) recommended = 16;
   if (type === 'lighting' && recommended < 10) recommended = 10;
   return recommended;
+};
+
+const getCableSize = (amps: number) => {
+  if (amps <= 10) return '3x1.5 მმ²';
+  if (amps <= 16) return '3x2.5 მმ²';
+  if (amps <= 25) return '3x4.0 მმ²';
+  if (amps <= 32) return '3x6.0 მმ²';
+  if (amps <= 40) return '3x10.0 მმ²';
+  return '3x16.0 მმ²';
 };
 
 function generateModules(
@@ -263,6 +272,41 @@ export default function App() {
   const [showBom, setShowBom] = useState(false);
   const [showDiagram, setShowDiagram] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Load configuration from URL hash
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(atob(hash)));
+        if (decoded.groups) setGroups(decoded.groups);
+        if (decoded.rooms) setRooms(decoded.rooms);
+        if (decoded.includeRelay !== undefined) setIncludeRelay(decoded.includeRelay);
+        if (decoded.diversityFactor) setDiversityFactor(decoded.diversityFactor);
+        if (decoded.mainProtection) setMainProtection(decoded.mainProtection);
+        if (decoded.viewMode) setViewMode(decoded.viewMode);
+      } catch (e) {
+        console.error('Failed to parse shared config', e);
+      }
+    }
+  }, []);
+
+  const handleShare = () => {
+    const state = {
+      groups,
+      rooms,
+      includeRelay,
+      diversityFactor,
+      mainProtection,
+      viewMode
+    };
+    const encoded = btoa(encodeURIComponent(JSON.stringify(state)));
+    const url = `${window.location.origin}${window.location.pathname}#${encoded}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
   const designPowerKw = totalPowerKw * diversityFactor;
@@ -499,33 +543,44 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:h-screen md:overflow-hidden">
-      
-      {/* Top Header */}
-      <header className="flex items-center justify-between p-4 border-b border-[#1a1a1a] bg-[#0d0d0d] shrink-0 sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <Zap className="text-[#00ff88] w-6 h-6" />
-          <h1 className="text-xl font-bold tracking-tight text-white hidden md:block">Poweron.ge</h1>
-        </div>
-        <div className="flex bg-[#141414] p-1 rounded-lg border border-[#2a2a2a]">
-          <button 
-            onClick={() => setViewMode('wizard')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'wizard' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            <span className="hidden md:inline">მარტივი კითხვარი</span>
-            <span className="md:hidden">კითხვარი</span>
-          </button>
-          <button 
-            onClick={() => setViewMode('expert')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'expert' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-          >
-            <Settings2 className="w-4 h-4" />
-            <span className="hidden md:inline">ექსპერტის რეჟიმი</span>
-            <span className="md:hidden">ექსპერტი</span>
-          </button>
-        </div>
-      </header>
+    <div className="w-full">
+      {/* Main App UI (Hidden during print) */}
+      <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:h-screen md:overflow-hidden print:hidden">
+        
+        {/* Top Header */}
+        <header className="flex items-center justify-between p-4 border-b border-[#1a1a1a] bg-[#0d0d0d] shrink-0 sticky top-0 z-50">
+          <div className="flex items-center gap-3">
+            <Zap className="text-[#00ff88] w-6 h-6" />
+            <h1 className="text-xl font-bold tracking-tight text-white hidden md:block">Poweron.ge</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleShare}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-zinc-300 transition-colors text-sm"
+            >
+              {copied ? <Check className="w-4 h-4 text-[#00ff88]" /> : <Share2 className="w-4 h-4" />}
+              <span className="hidden md:inline">{copied ? 'დაკოპირდა' : 'გაზიარება'}</span>
+            </button>
+            <div className="flex bg-[#141414] p-1 rounded-lg border border-[#2a2a2a]">
+              <button 
+                onClick={() => setViewMode('wizard')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'wizard' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden md:inline">მარტივი კითხვარი</span>
+                <span className="md:hidden">კითხვარი</span>
+              </button>
+              <button 
+                onClick={() => setViewMode('expert')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'expert' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+              >
+                <Settings2 className="w-4 h-4" />
+                <span className="hidden md:inline">ექსპერტის რეჟიმი</span>
+                <span className="md:hidden">ექსპერტი</span>
+              </button>
+            </div>
+          </div>
+        </header>
 
       <main className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
         {viewMode === 'wizard' ? (
@@ -842,7 +897,6 @@ export default function App() {
                     </div>
                     <div className="flex items-center justify-between pl-6">
                       <div className="flex items-center gap-2">
-                        <label className="text-xs text-zinc-500">სიმძლავრე:</label>
                         <div className="flex items-center gap-1">
                           <input 
                             type="number" 
@@ -854,19 +908,25 @@ export default function App() {
                           />
                           <span className="text-xs text-zinc-500">kW</span>
                         </div>
+                        <span className="text-xs font-mono text-zinc-500 bg-[#080808] px-2 py-1 rounded border border-[#1a1a1a]">
+                          {getBreakerAmperage(g.powerKw, g.type)}A
+                        </span>
+                        <span className="text-[10px] font-mono text-blue-400/70 bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20" title="რეკომენდებული კაბელის კვეთა">
+                          {getCableSize(getBreakerAmperage(g.powerKw, g.type))}
+                        </span>
                       </div>
-                      <label className="flex items-center gap-1.5 cursor-pointer group/wet">
-                        <input 
-                          type="checkbox" 
-                          checked={g.isWet}
-                          onChange={(e) => updateGroup(g.instanceId, { isWet: e.target.checked })}
-                          className="hidden"
-                        />
-                        <div className={`w-3 h-3 rounded-sm border flex items-center justify-center transition-colors ${g.isWet ? 'bg-blue-500 border-blue-500' : 'border-zinc-600 group-hover/wet:border-blue-400'}`}>
-                          {g.isWet && <Shield className="w-2 h-2 text-white" />}
-                        </div>
-                        <span className={`text-[10px] uppercase tracking-wider ${g.isWet ? 'text-blue-400' : 'text-zinc-500'}`}>დიფ. დაცვა</span>
-                      </label>
+                      <div className="mt-3 pt-3 border-t border-[#1a1a1a] w-full flex justify-between items-center">
+                        <label className={`flex items-center gap-2 text-xs ${mainProtection !== 'mcb' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <input 
+                            type="checkbox" 
+                            checked={!!g.hasRcbo && mainProtection === 'mcb'} 
+                            disabled={mainProtection !== 'mcb'}
+                            onChange={(e) => updateGroup(g.instanceId, { hasRcbo: e.target.checked })}
+                            className="accent-[#00ff88] w-3.5 h-3.5 rounded-sm bg-zinc-800 border-zinc-700"
+                          />
+                          <span className="text-zinc-400">RCBO</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -885,7 +945,7 @@ export default function App() {
 
               {/* Checkout Footer */}
               <div className="p-4 md:p-6 border-t border-[#1a1a1a] bg-[#0a0a0a] flex flex-col gap-3">
-                <div className="flex gap-3">
+                <div className="flex gap-2 md:gap-3">
                   <button 
                     onClick={() => setShowDiagram(true)}
                     className="flex-1 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
@@ -899,6 +959,13 @@ export default function App() {
                   >
                     <List className="w-4 h-4" />
                     <span className="hidden md:inline">BOM</span>
+                  </button>
+                  <button 
+                    onClick={() => window.print()}
+                    className="flex-1 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span className="hidden md:inline">PDF</span>
                   </button>
                 </div>
                 <button 
@@ -1041,6 +1108,9 @@ export default function App() {
                         <div className="mt-2 text-[10px] text-zinc-400 text-center max-w-[60px] break-words">
                           {g.name}
                         </div>
+                        <div className="mt-1 text-[9px] text-blue-400/70 font-mono">
+                          {getCableSize(amp)}
+                        </div>
                       </div>
                     );
                   })}
@@ -1063,7 +1133,7 @@ export default function App() {
 
       {/* Checkout Modal */}
       {checkoutUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center">
             <div className="w-16 h-16 bg-[#00ff88]/10 rounded-full flex items-center justify-center mb-6">
               <ShoppingCart className="w-8 h-8 text-[#00ff88]" />
@@ -1092,6 +1162,118 @@ export default function App() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* Printable Report (Hidden on screen, visible on print) */}
+      <div className="hidden print:block text-black bg-white p-8 font-sans w-full min-h-screen">
+        <div className="flex justify-between items-end mb-8 border-b-2 border-black pb-4">
+          <div>
+            <h1 className="text-3xl font-bold flex items-center gap-2">
+              <Zap className="w-8 h-8" /> Poweron.ge
+            </h1>
+            <p className="text-gray-600 mt-1">ელექტრო ფარის სპეციფიკაცია</p>
+          </div>
+          <div className="text-right text-sm text-gray-500">
+            თარიღი: {new Date().toLocaleDateString('ka-GE')}
+          </div>
+        </div>
+
+        {/* Diagram */}
+        <h2 className="text-xl font-bold mb-6">ერთხაზიანი სქემა (Single Line Diagram)</h2>
+        <div className="flex flex-col items-center mb-12">
+          {/* Grid Connection */}
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full border-2 border-black flex items-center justify-center font-mono text-xs font-bold">
+              L, N
+            </div>
+            <div className="w-0.5 h-8 bg-black"></div>
+          </div>
+
+          {/* Main Breaker */}
+          <div className="flex flex-col items-center">
+            <div className="px-6 py-3 rounded-lg border-2 border-black font-mono text-sm text-center font-bold">
+              {mainProtection === 'rcbo' ? 'RCBO' : 'MCB'}<br/>
+              {calculatedMainAmperage}A, 2P
+            </div>
+            <div className="w-0.5 h-8 bg-black"></div>
+          </div>
+
+          {/* Voltage Relay */}
+          {includeRelay && (
+            <div className="flex flex-col items-center">
+              <div className="px-6 py-3 rounded-lg border-2 border-black font-mono text-sm text-center font-bold">
+                V-Relay<br/>
+                {calculatedMainAmperage <= 40 ? 40 : 63}A
+              </div>
+              <div className="w-0.5 h-8 bg-black"></div>
+            </div>
+          )}
+
+          {/* RCCB (if selected) */}
+          {mainProtection === 'mcb_rccb' && (
+            <div className="flex flex-col items-center">
+              <div className="px-6 py-3 rounded-lg border-2 border-black font-mono text-sm text-center font-bold">
+                RCCB<br/>
+                63A, 30mA
+              </div>
+              <div className="w-0.5 h-8 bg-black"></div>
+            </div>
+          )}
+
+          {/* Branches */}
+          <div className="flex flex-wrap justify-center w-full border-t-4 border-black pt-4 mt-4 relative gap-y-8">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full w-1 h-4 bg-black"></div>
+            
+            {groups.map((g, idx) => {
+              const amp = getBreakerAmperage(g.powerKw, g.type);
+              const isRcbo = g.hasRcbo && mainProtection === 'mcb';
+              const cable = getCableSize(amp);
+              
+              return (
+                <div key={idx} className="flex flex-col items-center w-24 px-1">
+                  <div className="w-0.5 h-4 bg-black absolute top-0"></div>
+                  <div className="w-full py-2 mt-4 rounded border-2 border-black font-mono text-[10px] text-center mb-2 font-bold bg-white z-10">
+                    {isRcbo ? 'RCBO' : 'MCB'}<br/>
+                    {amp}A
+                  </div>
+                  <div className="w-0.5 h-6 bg-black border-l-2 border-dashed border-black"></div>
+                  <div className="mt-2 text-[10px] text-center break-words font-medium leading-tight">
+                    {g.name}
+                  </div>
+                  <div className="mt-1 text-[9px] text-gray-600 font-mono font-bold">
+                    {cable}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* BOM */}
+        <h2 className="text-xl font-bold mb-4">მასალების სია (BOM)</h2>
+        <table className="w-full text-left text-sm mb-12 border-collapse">
+          <thead>
+            <tr className="border-b-2 border-black">
+              <th className="py-2">დასახელება</th>
+              <th className="py-2">აღწერილობა</th>
+              <th className="py-2 text-center">რაოდენობა</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bomItems.map((item, idx) => (
+              <tr key={idx} className="border-b border-gray-300">
+                <td className="py-2 font-medium">{item.name}</td>
+                <td className="py-2 text-gray-600">{item.description}</td>
+                <td className="py-2 text-center font-mono font-bold">{item.quantity} ც</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        <div className="text-center text-xs text-gray-400 mt-12 pt-4 border-t border-gray-200">
+          გენერირებულია Poweron.ge-ს ჭკვიანი კონფიგურატორის მიერ
+        </div>
+      </div>
 
     </div>
   );
