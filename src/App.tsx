@@ -3,7 +3,9 @@ import {
   Lightbulb, Plug, Wind, ChefHat, WashingMachine, 
   Utensils, Bath, TreePine, Coffee, Plus, Trash2, 
   Zap, Shield, Info, ShoppingCart, Flame,
-  ChevronUp, ChevronDown, List, X
+  ChevronUp, ChevronDown, List, X,
+  Sofa, BedDouble, Home, LayoutDashboard, Settings2, Minus,
+  GitMerge
 } from 'lucide-react';
 
 type PointType = 'lighting' | 'socket' | 'appliance';
@@ -16,7 +18,41 @@ interface PredefinedPoint {
   isWet: boolean;
   isDedicated: boolean;
   icon: React.ElementType;
+  hasRcbo?: boolean;
 }
+
+interface RoomAppliance {
+  id: string;
+  catalogId: string;
+  powerKw: number;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  type: 'living' | 'bedroom' | 'kitchen' | 'bathroom' | 'other';
+  lightingCount: number;
+  socketCount: number;
+  appliances: RoomAppliance[];
+}
+
+const APPLIANCE_CATALOG = [
+  { id: 'ac', name: 'კონდიციონერი', defaultPower: 2.5, isWet: false, icon: Wind },
+  { id: 'fridge', name: 'მაცივარი', defaultPower: 0.5, isWet: false, icon: ChefHat },
+  { id: 'oven', name: 'ელ. ღუმელი', defaultPower: 3.0, isWet: false, icon: ChefHat },
+  { id: 'washing_machine', name: 'სარეცხი მანქანა', defaultPower: 2.0, isWet: true, icon: WashingMachine },
+  { id: 'dishwasher', name: 'ჭურჭლის სარეცხი', defaultPower: 2.0, isWet: true, icon: Utensils },
+  { id: 'boiler', name: 'გათბობის ქვაბი', defaultPower: 2.0, isWet: true, icon: Flame },
+  { id: 'kettle', name: 'ჩაიდანი', defaultPower: 2.0, isWet: false, icon: Coffee },
+];
+
+const ROOM_TYPES = [
+  { id: 'living', name: 'მისაღები', icon: Sofa },
+  { id: 'bedroom', name: 'საძინებელი', icon: BedDouble },
+  { id: 'kitchen', name: 'სამზარეულო', icon: ChefHat },
+  { id: 'bathroom', name: 'აბაზანა', icon: Bath },
+  { id: 'other', name: 'სხვა ოთახი', icon: Home },
+];
 
 const PREDEFINED_POINTS: PredefinedPoint[] = [
   { id: 'light', name: 'განათება', powerKw: 0.1, type: 'lighting', isWet: false, isDedicated: false, icon: Lightbulb },
@@ -113,7 +149,11 @@ function generateModules(
 
   groups.forEach((g) => {
     const amp = getBreakerAmperage(g.powerKw, g.type);
-    if (g.isWet) {
+    
+    // Rule: If main protection is RCBO or RCCB, we don't need individual RCBOs
+    const needsRcbo = g.hasRcbo && mainProtection === 'mcb';
+
+    if (needsRcbo) {
       modules.push({
         id: g.instanceId,
         name: g.name,
@@ -213,11 +253,15 @@ const ModuleBlock = ({
 }
 
 export default function App() {
+  const [viewMode, setViewMode] = useState<'wizard' | 'expert'>('wizard');
+  const [rooms, setRooms] = useState<Room[]>([]);
+  
   const [groups, setGroups] = useState<(PredefinedPoint & { instanceId: string })[]>([]);
   const [includeRelay, setIncludeRelay] = useState(true);
   const [diversityFactor, setDiversityFactor] = useState(0.8);
   const [mainProtection, setMainProtection] = useState<'mcb' | 'rcbo' | 'mcb_rccb'>('mcb');
   const [showBom, setShowBom] = useState(false);
+  const [showDiagram, setShowDiagram] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const totalPowerKw = groups.reduce((sum, g) => sum + g.powerKw, 0);
@@ -235,7 +279,12 @@ export default function App() {
   const addGroup = (point: PredefinedPoint) => {
     const count = groups.filter(g => g.id === point.id).length;
     const newName = count > 0 ? `${point.name} (ჯგუფი ${count + 1})` : point.name;
-    setGroups([...groups, { ...point, name: newName, instanceId: `${point.id}_${Date.now()}` }]);
+    setGroups([...groups, { 
+      ...point, 
+      name: newName, 
+      instanceId: `${point.id}_${Date.now()}`,
+      hasRcbo: point.isWet && point.type !== 'lighting'
+    }]);
   };
 
   const removeGroup = (instanceId: string) => {
@@ -276,6 +325,83 @@ export default function App() {
       [newGroups[index + 1], newGroups[index]] = [newGroups[index], newGroups[index + 1]];
       setGroups(newGroups);
     }
+  };
+
+  const addRoom = (type: Room['type']) => {
+    const typeDef = ROOM_TYPES.find(t => t.id === type);
+    const count = rooms.filter(r => r.type === type).length + 1;
+    setRooms([...rooms, {
+      id: `room_${Date.now()}`,
+      name: `${typeDef?.name} ${count}`,
+      type,
+      lightingCount: 1,
+      socketCount: 2,
+      appliances: []
+    }]);
+  };
+
+  const updateRoom = (id: string, updates: Partial<Room>) => {
+    setRooms(rooms.map(r => r.id === id ? { ...r, ...updates } : r));
+  };
+
+  const removeRoom = (id: string) => {
+    setRooms(rooms.filter(r => r.id !== id));
+  };
+
+  const generateFromWizard = () => {
+    const newGroups: (PredefinedPoint & { instanceId: string })[] = [];
+    
+    rooms.forEach(room => {
+      const isWetRoom = room.type === 'bathroom' || room.type === 'kitchen';
+      
+      if (room.lightingCount > 0) {
+        newGroups.push({
+          id: 'light',
+          name: `${room.name} (განათება)`,
+          powerKw: Number((room.lightingCount * 0.05).toFixed(2)) || 0.1,
+          type: 'lighting',
+          isWet: isWetRoom,
+          isDedicated: false,
+          icon: Lightbulb,
+          hasRcbo: false,
+          instanceId: `light_${room.id}_${Date.now()}`
+        });
+      }
+      
+      if (room.socketCount > 0) {
+        newGroups.push({
+          id: 'socket',
+          name: `${room.name} (შტეფსელები)`,
+          powerKw: Math.max(2.0, room.socketCount * 0.2),
+          type: 'socket',
+          isWet: isWetRoom,
+          isDedicated: false,
+          icon: Plug,
+          hasRcbo: isWetRoom,
+          instanceId: `socket_${room.id}_${Date.now()}`
+        });
+      }
+      
+      room.appliances.forEach(app => {
+        const catalogApp = APPLIANCE_CATALOG.find(a => a.id === app.catalogId);
+        if (catalogApp) {
+          newGroups.push({
+            id: catalogApp.id,
+            name: `${room.name} - ${catalogApp.name}`,
+            powerKw: app.powerKw,
+            type: 'appliance',
+            isWet: catalogApp.isWet || isWetRoom,
+            isDedicated: true,
+            icon: catalogApp.icon,
+            hasRcbo: catalogApp.isWet || isWetRoom,
+            instanceId: `app_${app.id}_${Date.now()}`
+          });
+        }
+      });
+    });
+    
+    setGroups(newGroups);
+    setViewMode('expert');
   };
 
   const modules = useMemo(() => generateModules(groups, includeRelay, effectiveMainProtection, calculatedMainAmperage), [groups, includeRelay, effectiveMainProtection, calculatedMainAmperage]);
@@ -373,44 +499,180 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:flex-row md:overflow-hidden">
+    <div className="min-h-screen bg-[#080808] text-white font-sans flex flex-col md:h-screen md:overflow-hidden">
       
-      {/* Left Sidebar - Points Selection */}
-      <div className="w-full md:w-80 bg-[#0d0d0d] border-b md:border-b-0 md:border-r border-[#1a1a1a] flex flex-col md:h-screen shrink-0">
-        <div className="p-4 md:p-6 border-b border-[#1a1a1a]">
-          <div className="flex items-center gap-3 mb-1 md:mb-2">
-            <Zap className="text-[#00ff88] w-5 h-5 md:w-6 md:h-6" />
-            <h1 className="text-lg md:text-xl font-bold tracking-tight text-white">Poweron.ge</h1>
-          </div>
-          <p className="text-xs md:text-sm text-zinc-400">Smart DB Configurator</p>
+      {/* Top Header */}
+      <header className="flex items-center justify-between p-4 border-b border-[#1a1a1a] bg-[#0d0d0d] shrink-0 sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <Zap className="text-[#00ff88] w-6 h-6" />
+          <h1 className="text-xl font-bold tracking-tight text-white hidden md:block">Poweron.ge</h1>
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 custom-scrollbar max-h-[35vh] md:max-h-none">
-          <h2 className="text-[10px] md:text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 md:mb-4 px-2">ჯგუფების დამატება</h2>
-          {PREDEFINED_POINTS.map(point => (
-            <button
-              key={point.id}
-              onClick={() => addGroup(point)}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-[#141414] border border-[#1a1a1a] hover:border-[#00ff88]/50 hover:bg-[#1a241c] transition-all group"
-            >
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${point.isWet ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-800 text-zinc-300'} group-hover:text-[#00ff88]`}>
-                  <point.icon className="w-4 h-4" />
+        <div className="flex bg-[#141414] p-1 rounded-lg border border-[#2a2a2a]">
+          <button 
+            onClick={() => setViewMode('wizard')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'wizard' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="hidden md:inline">მარტივი კითხვარი</span>
+            <span className="md:hidden">კითხვარი</span>
+          </button>
+          <button 
+            onClick={() => setViewMode('expert')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${viewMode === 'expert' ? 'bg-[#2a2a2a] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            <Settings2 className="w-4 h-4" />
+            <span className="hidden md:inline">ექსპერტის რეჟიმი</span>
+            <span className="md:hidden">ექსპერტი</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+        {viewMode === 'wizard' ? (
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-[#0a0a0a] custom-scrollbar">
+            <div className="max-w-5xl mx-auto">
+              <div className="mb-8 text-center">
+                <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">მარტივი კითხვარი</h2>
+                <p className="text-zinc-400 text-sm md:text-base">დაამატეთ ოთახები და მიუთითეთ წერტილების რაოდენობა. სისტემა ავტომატურად ააწყობს ფარს.</p>
+              </div>
+              
+              <div className="flex flex-wrap justify-center gap-3 mb-8">
+                {ROOM_TYPES.map(rt => (
+                  <button key={rt.id} onClick={() => addRoom(rt.id as any)} className="bg-[#141414] hover:bg-[#1a241c] hover:border-[#00ff88]/50 border border-[#1a1a1a] text-zinc-300 px-4 py-2 rounded-xl flex items-center gap-2 transition-colors text-sm">
+                    <rt.icon className="w-4 h-4" />
+                    {rt.name} +
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+                {rooms.map(room => (
+                  <div key={room.id} className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-5 flex flex-col">
+                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#1a1a1a]">
+                      <input 
+                        type="text" 
+                        value={room.name}
+                        onChange={(e) => updateRoom(room.id, { name: e.target.value })}
+                        className="bg-transparent font-semibold text-lg text-white outline-none border-b border-transparent focus:border-[#00ff88] w-full mr-2"
+                      />
+                      <button onClick={() => removeRoom(room.id)} className="text-zinc-600 hover:text-red-400 p-1">
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4 flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-zinc-400 flex items-center gap-2"><Lightbulb className="w-4 h-4"/> განათება</span>
+                        <div className="flex items-center gap-3 bg-[#080808] rounded-lg p-1 border border-[#1a1a1a]">
+                          <button onClick={() => updateRoom(room.id, { lightingCount: Math.max(0, room.lightingCount - 1) })} className="p-1 text-zinc-500 hover:text-white"><Minus className="w-4 h-4"/></button>
+                          <span className="w-4 text-center text-sm font-mono">{room.lightingCount}</span>
+                          <button onClick={() => updateRoom(room.id, { lightingCount: room.lightingCount + 1 })} className="p-1 text-zinc-500 hover:text-white"><Plus className="w-4 h-4"/></button>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-zinc-400 flex items-center gap-2"><Plug className="w-4 h-4"/> შტეფსელები</span>
+                        <div className="flex items-center gap-3 bg-[#080808] rounded-lg p-1 border border-[#1a1a1a]">
+                          <button onClick={() => updateRoom(room.id, { socketCount: Math.max(0, room.socketCount - 1) })} className="p-1 text-zinc-500 hover:text-white"><Minus className="w-4 h-4"/></button>
+                          <span className="w-4 text-center text-sm font-mono">{room.socketCount}</span>
+                          <button onClick={() => updateRoom(room.id, { socketCount: room.socketCount + 1 })} className="p-1 text-zinc-500 hover:text-white"><Plus className="w-4 h-4"/></button>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-[#1a1a1a]">
+                        <span className="text-xs text-zinc-500 uppercase tracking-wider mb-2 block">დამატებითი ტექნიკა</span>
+                        <div className="space-y-2">
+                          {room.appliances.map(app => {
+                            const catalogApp = APPLIANCE_CATALOG.find(a => a.id === app.catalogId);
+                            return (
+                              <div key={app.id} className="flex items-center justify-between bg-[#080808] p-2 rounded-lg border border-[#1a1a1a]">
+                                <span className="text-xs text-zinc-300 truncate pr-2">{catalogApp?.name}</span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <input 
+                                    type="number" 
+                                    step="0.1" 
+                                    value={app.powerKw}
+                                    onChange={(e) => {
+                                      const newApps = room.appliances.map(a => a.id === app.id ? { ...a, powerKw: parseFloat(e.target.value) || 0 } : a);
+                                      updateRoom(room.id, { appliances: newApps });
+                                    }}
+                                    className="w-12 bg-transparent border-b border-zinc-700 text-xs text-center text-[#00ff88] outline-none focus:border-[#00ff88]"
+                                  />
+                                  <span className="text-[10px] text-zinc-600">kW</span>
+                                  <button onClick={() => {
+                                    updateRoom(room.id, { appliances: room.appliances.filter(a => a.id !== app.id) });
+                                  }} className="text-zinc-600 hover:text-red-400 ml-1"><X className="w-3 h-3"/></button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          
+                          <select 
+                            className="w-full bg-[#080808] border border-[#1a1a1a] text-zinc-400 text-xs rounded-lg p-2 outline-none focus:border-[#00ff88]"
+                            value=""
+                            onChange={(e) => {
+                              if (!e.target.value) return;
+                              const catalogApp = APPLIANCE_CATALOG.find(a => a.id === e.target.value);
+                              if (catalogApp) {
+                                updateRoom(room.id, {
+                                  appliances: [...room.appliances, { id: `app_${Date.now()}`, catalogId: catalogApp.id, powerKw: catalogApp.defaultPower }]
+                                });
+                              }
+                            }}
+                          >
+                            <option value="">+ ტექნიკის დამატება</option>
+                            {APPLIANCE_CATALOG.map(ca => (
+                              <option key={ca.id} value={ca.id}>{ca.name} ({ca.defaultPower}kW)</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {rooms.length > 0 && (
+                <div className="flex justify-center pb-12">
+                  <button onClick={generateFromWizard} className="bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold px-8 py-4 rounded-xl flex items-center gap-2 shadow-[0_0_30px_rgba(0,255,136,0.3)] transition-all hover:scale-105">
+                    <Zap className="w-5 h-5" /> ფარის ავტომატური გენერაცია
+                  </button>
                 </div>
-                <div className="text-left">
-                  <div className="text-sm font-medium text-zinc-200">{point.name}</div>
-                  <div className="text-xs text-zinc-500">{point.powerKw} kW {point.isWet && '• სველი'}</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Left Sidebar - Points Selection */}
+            <div className="w-full md:w-80 bg-[#0d0d0d] border-b md:border-b-0 md:border-r border-[#1a1a1a] flex flex-col md:h-full shrink-0 order-2 md:order-1">
+              <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar">
+                <h2 className="text-[10px] md:text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 md:mb-4 px-2">ჯგუფების დამატება</h2>
+                <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+                  {PREDEFINED_POINTS.map(point => (
+                    <button
+                      key={point.id}
+                      onClick={() => addGroup(point)}
+                      className="w-full flex items-center justify-between p-2 md:p-3 rounded-xl bg-[#141414] border border-[#1a1a1a] hover:border-[#00ff88]/50 hover:bg-[#1a241c] transition-all group"
+                    >
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <div className={`p-1.5 md:p-2 rounded-lg ${point.isWet ? 'bg-blue-500/10 text-blue-400' : 'bg-zinc-800 text-zinc-300'} group-hover:text-[#00ff88]`}>
+                          <point.icon className="w-3 h-3 md:w-4 md:h-4" />
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs md:text-sm font-medium text-zinc-200 truncate max-w-[80px] md:max-w-none">{point.name}</div>
+                          <div className="text-[9px] md:text-xs text-zinc-500">{point.powerKw} kW {point.isWet && '• სველი'}</div>
+                        </div>
+                      </div>
+                      <Plus className="w-3 h-3 md:w-4 md:h-4 text-zinc-600 group-hover:text-[#00ff88] shrink-0" />
+                    </button>
+                  ))}
                 </div>
               </div>
-              <Plus className="w-4 h-4 text-zinc-600 group-hover:text-[#00ff88]" />
-            </button>
-          ))}
-        </div>
-      </div>
+            </div>
 
-      {/* Center - Visual Board */}
-      <div className="w-full md:flex-1 flex flex-col md:h-screen relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111] via-[#080808] to-[#050505]">
-        <div className="p-4 md:p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
+            {/* Center - Visual Board */}
+            <div className="w-full md:flex-1 flex flex-col md:h-full relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111] via-[#080808] to-[#050505] order-1 md:order-2 min-h-[400px] md:min-h-0">
+              <div className="p-4 md:p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
           <h2 className="text-base md:text-lg font-medium text-zinc-200">ვიზუალური ფარი</h2>
           <div className="flex items-center gap-2 text-xs md:text-sm text-zinc-400">
             <Shield className="w-3 h-3 md:w-4 md:h-4 text-[#00ff88]" />
@@ -444,9 +706,9 @@ export default function App() {
         </div>
       </div>
 
-      {/* Right Sidebar - Summary */}
-      <div className="w-full md:w-96 bg-[#0d0d0d] border-t md:border-t-0 md:border-l border-[#1a1a1a] flex flex-col md:h-screen shrink-0">
-        <div className="p-4 md:p-6 border-b border-[#1a1a1a]">
+            {/* Right Sidebar - Summary */}
+            <div className="w-full md:w-96 bg-[#0d0d0d] border-t md:border-t-0 md:border-l border-[#1a1a1a] flex flex-col md:h-full shrink-0 order-3">
+              <div className="p-4 md:p-6 border-b border-[#1a1a1a]">
           <h2 className="text-base md:text-lg font-medium text-zinc-200">სპეციფიკაცია</h2>
         </div>
 
@@ -621,24 +883,36 @@ export default function App() {
           </div>
         </div>
 
-        {/* Checkout Footer */}
-        <div className="p-4 md:p-6 border-t border-[#1a1a1a] bg-[#0a0a0a] flex flex-col gap-3">
-          <button 
-            onClick={() => setShowBom(true)}
-            className="w-full bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
-          >
-            <List className="w-4 h-4" />
-            <span>მასალების სია (BOM)</span>
-          </button>
-          <button 
-            onClick={handleCheckout}
-            className="w-full bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors"
-          >
-            <ShoppingCart className="w-5 h-5" />
-            <span>კალათაში დამატება</span>
-          </button>
-        </div>
-      </div>
+              {/* Checkout Footer */}
+              <div className="p-4 md:p-6 border-t border-[#1a1a1a] bg-[#0a0a0a] flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowDiagram(true)}
+                    className="flex-1 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <GitMerge className="w-4 h-4" />
+                    <span className="hidden md:inline">სქემა</span>
+                  </button>
+                  <button 
+                    onClick={() => setShowBom(true)}
+                    className="flex-1 bg-[#1a1a1a] hover:bg-[#2a2a2a] border border-[#333] text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <List className="w-4 h-4" />
+                    <span className="hidden md:inline">BOM</span>
+                  </button>
+                </div>
+                <button 
+                  onClick={handleCheckout}
+                  className="w-full bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold py-4 rounded-xl flex items-center justify-center gap-2 transition-colors"
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  <span>კალათაში დამატება</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </main>
 
       {/* BOM Modal */}
       {showBom && (
@@ -680,6 +954,104 @@ export default function App() {
             <div className="mt-4 md:mt-6 pt-4 border-t border-[#1a1a1a] flex justify-end">
               <button 
                 onClick={() => setShowBom(false)}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-lg transition-colors text-sm"
+              >
+                დახურვა
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diagram Modal */}
+      {showDiagram && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 md:p-6 max-w-4xl w-full shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between mb-4 md:mb-6">
+              <h3 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                <GitMerge className="w-5 h-5 text-[#00ff88]" />
+                Single Line Diagram
+              </h3>
+              <button onClick={() => setShowDiagram(false)} className="text-zinc-500 hover:text-white p-1">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-[#0a0a0a] rounded-xl border border-[#1a1a1a]">
+              <div className="min-w-[600px] flex flex-col items-center py-8">
+                
+                {/* Grid Connection */}
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full border-2 border-zinc-600 flex items-center justify-center text-zinc-400 font-mono text-xs">
+                    L, N
+                  </div>
+                  <div className="w-0.5 h-8 bg-zinc-600"></div>
+                </div>
+
+                {/* Main Breaker */}
+                <div className="flex flex-col items-center">
+                  <div className={`px-6 py-3 rounded-lg border-2 ${mainProtection === 'rcbo' ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-[#00ff88] bg-[#00ff88]/10 text-[#00ff88]'} font-mono text-sm text-center`}>
+                    {mainProtection === 'rcbo' ? 'RCBO' : 'MCB'}<br/>
+                    {calculatedMainAmperage}A, 2P
+                  </div>
+                  <div className="w-0.5 h-8 bg-zinc-600"></div>
+                </div>
+
+                {/* Voltage Relay */}
+                {includeRelay && (
+                  <div className="flex flex-col items-center">
+                    <div className="px-6 py-3 rounded-lg border-2 border-orange-500 bg-orange-500/10 text-orange-400 font-mono text-sm text-center">
+                      V-Relay<br/>
+                      {calculatedMainAmperage <= 40 ? 40 : 63}A
+                    </div>
+                    <div className="w-0.5 h-8 bg-zinc-600"></div>
+                  </div>
+                )}
+
+                {/* RCCB (if selected) */}
+                {mainProtection === 'mcb_rccb' && (
+                  <div className="flex flex-col items-center">
+                    <div className="px-6 py-3 rounded-lg border-2 border-purple-500 bg-purple-500/10 text-purple-400 font-mono text-sm text-center">
+                      RCCB<br/>
+                      63A, 30mA
+                    </div>
+                    <div className="w-0.5 h-8 bg-zinc-600"></div>
+                  </div>
+                )}
+
+                {/* Busbar */}
+                <div className="w-full max-w-2xl h-1 bg-zinc-600 relative my-4">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full w-0.5 h-4 bg-zinc-600"></div>
+                </div>
+
+                {/* Branches */}
+                <div className="flex justify-between w-full max-w-2xl px-4 gap-4">
+                  {groups.map((g, idx) => {
+                    const amp = getBreakerAmperage(g.powerKw, g.type);
+                    const isRcbo = g.hasRcbo && mainProtection === 'mcb';
+                    
+                    return (
+                      <div key={idx} className="flex flex-col items-center flex-1">
+                        <div className="w-0.5 h-6 bg-zinc-600"></div>
+                        <div className={`w-full py-2 rounded border ${isRcbo ? 'border-blue-500/50 bg-blue-500/10 text-blue-300' : 'border-zinc-600 bg-zinc-800 text-zinc-300'} font-mono text-[10px] text-center mb-2`}>
+                          {isRcbo ? 'RCBO' : 'MCB'}<br/>
+                          {amp}A
+                        </div>
+                        <div className="w-0.5 h-6 bg-zinc-600 border-l border-dashed border-zinc-500"></div>
+                        <div className="mt-2 text-[10px] text-zinc-400 text-center max-w-[60px] break-words">
+                          {g.name}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+            </div>
+            
+            <div className="mt-4 md:mt-6 pt-4 border-t border-[#1a1a1a] flex justify-end">
+              <button 
+                onClick={() => setShowDiagram(false)}
                 className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded-lg transition-colors text-sm"
               >
                 დახურვა
