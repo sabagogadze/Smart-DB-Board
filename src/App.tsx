@@ -263,6 +263,7 @@ const ModuleBlock = ({
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'wizard' | 'expert'>('wizard');
+  const [boardTier, setBoardTier] = useState<'economy' | 'premium'>('premium');
   const [rooms, setRooms] = useState<Room[]>([]);
   
   const [groups, setGroups] = useState<(PredefinedPoint & { instanceId: string })[]>([]);
@@ -286,6 +287,7 @@ export default function App() {
         if (decoded.diversityFactor) setDiversityFactor(decoded.diversityFactor);
         if (decoded.mainProtection) setMainProtection(decoded.mainProtection);
         if (decoded.viewMode) setViewMode(decoded.viewMode);
+        if (decoded.boardTier) setBoardTier(decoded.boardTier);
       } catch (e) {
         console.error('Failed to parse shared config', e);
       }
@@ -299,7 +301,8 @@ export default function App() {
       includeRelay,
       diversityFactor,
       mainProtection,
-      viewMode
+      viewMode,
+      boardTier
     };
     const encoded = btoa(encodeURIComponent(JSON.stringify(state)));
     const url = `${window.location.origin}${window.location.pathname}#${encoded}`;
@@ -395,54 +398,141 @@ export default function App() {
   const generateFromWizard = () => {
     const newGroups: (PredefinedPoint & { instanceId: string })[] = [];
     
-    rooms.forEach(room => {
-      const isWetRoom = room.type === 'bathroom' || room.type === 'kitchen';
+    if (boardTier === 'economy') {
+      setIncludeRelay(false);
       
-      if (room.lightingCount > 0) {
+      let totalLightingPower = 0;
+      let drySocketPower = 0;
+      let drySocketRooms: string[] = [];
+
+      rooms.forEach(room => {
+        const isWetRoom = room.type === 'bathroom' || room.type === 'kitchen';
+        
+        if (room.lightingCount > 0) {
+          totalLightingPower += Number((room.lightingCount * 0.05).toFixed(2)) || 0.1;
+        }
+        
+        if (room.socketCount > 0) {
+          if (isWetRoom) {
+            newGroups.push({
+              id: 'socket',
+              name: `${room.name} (შტეფსელები)`,
+              powerKw: Math.max(2.0, room.socketCount * 0.2),
+              type: 'socket',
+              isWet: true,
+              isDedicated: false,
+              icon: Plug,
+              hasRcbo: true,
+              instanceId: `socket_${room.id}_${Date.now()}`
+            });
+          } else {
+            drySocketPower += Math.max(2.0, room.socketCount * 0.2);
+            drySocketRooms.push(room.name);
+          }
+        }
+        
+        room.appliances.forEach(app => {
+          const catalogApp = APPLIANCE_CATALOG.find(a => a.id === app.catalogId);
+          if (catalogApp) {
+            newGroups.push({
+              id: catalogApp.id,
+              name: `${room.name} - ${catalogApp.name}`,
+              powerKw: app.powerKw,
+              type: 'appliance',
+              isWet: catalogApp.isWet || isWetRoom,
+              isDedicated: true,
+              icon: catalogApp.icon,
+              hasRcbo: catalogApp.isWet || isWetRoom,
+              instanceId: `app_${app.id}_${Date.now()}`
+            });
+          }
+        });
+      });
+
+      if (totalLightingPower > 0) {
         newGroups.push({
           id: 'light',
-          name: `${room.name} (განათება)`,
-          powerKw: Number((room.lightingCount * 0.05).toFixed(2)) || 0.1,
+          name: `საერთო განათება`,
+          powerKw: Number(totalLightingPower.toFixed(2)),
           type: 'lighting',
-          isWet: isWetRoom,
+          isWet: false,
           isDedicated: false,
           icon: Lightbulb,
           hasRcbo: false,
-          instanceId: `light_${room.id}_${Date.now()}`
+          instanceId: `light_all_${Date.now()}`
         });
       }
-      
-      if (room.socketCount > 0) {
-        newGroups.push({
-          id: 'socket',
-          name: `${room.name} (შტეფსელები)`,
-          powerKw: Math.max(2.0, room.socketCount * 0.2),
-          type: 'socket',
-          isWet: isWetRoom,
-          isDedicated: false,
-          icon: Plug,
-          hasRcbo: isWetRoom,
-          instanceId: `socket_${room.id}_${Date.now()}`
-        });
-      }
-      
-      room.appliances.forEach(app => {
-        const catalogApp = APPLIANCE_CATALOG.find(a => a.id === app.catalogId);
-        if (catalogApp) {
+
+      if (drySocketPower > 0) {
+        const numGroups = Math.ceil(drySocketPower / 3.5);
+        const powerPerGroup = Number((drySocketPower / numGroups).toFixed(2));
+        
+        for (let i = 0; i < numGroups; i++) {
           newGroups.push({
-            id: catalogApp.id,
-            name: `${room.name} - ${catalogApp.name}`,
-            powerKw: app.powerKw,
-            type: 'appliance',
-            isWet: catalogApp.isWet || isWetRoom,
-            isDedicated: true,
-            icon: catalogApp.icon,
-            hasRcbo: catalogApp.isWet || isWetRoom,
-            instanceId: `app_${app.id}_${Date.now()}`
+            id: 'socket',
+            name: numGroups > 1 ? `საერთო შტეფსელები ${i + 1}` : `შტეფსელები (${drySocketRooms.join(', ')})`,
+            powerKw: powerPerGroup,
+            type: 'socket',
+            isWet: false,
+            isDedicated: false,
+            icon: Plug,
+            hasRcbo: false,
+            instanceId: `socket_dry_${i}_${Date.now()}`
           });
         }
+      }
+
+    } else {
+      setIncludeRelay(true);
+      rooms.forEach(room => {
+        const isWetRoom = room.type === 'bathroom' || room.type === 'kitchen';
+        
+        if (room.lightingCount > 0) {
+          newGroups.push({
+            id: 'light',
+            name: `${room.name} (განათება)`,
+            powerKw: Number((room.lightingCount * 0.05).toFixed(2)) || 0.1,
+            type: 'lighting',
+            isWet: isWetRoom,
+            isDedicated: false,
+            icon: Lightbulb,
+            hasRcbo: false,
+            instanceId: `light_${room.id}_${Date.now()}`
+          });
+        }
+        
+        if (room.socketCount > 0) {
+          newGroups.push({
+            id: 'socket',
+            name: `${room.name} (შტეფსელები)`,
+            powerKw: Math.max(2.0, room.socketCount * 0.2),
+            type: 'socket',
+            isWet: isWetRoom,
+            isDedicated: false,
+            icon: Plug,
+            hasRcbo: isWetRoom,
+            instanceId: `socket_${room.id}_${Date.now()}`
+          });
+        }
+        
+        room.appliances.forEach(app => {
+          const catalogApp = APPLIANCE_CATALOG.find(a => a.id === app.catalogId);
+          if (catalogApp) {
+            newGroups.push({
+              id: catalogApp.id,
+              name: `${room.name} - ${catalogApp.name}`,
+              powerKw: app.powerKw,
+              type: 'appliance',
+              isWet: catalogApp.isWet || isWetRoom,
+              isDedicated: true,
+              icon: catalogApp.icon,
+              hasRcbo: catalogApp.isWet || isWetRoom,
+              instanceId: `app_${app.id}_${Date.now()}`
+            });
+          }
+        });
       });
-    });
+    }
     
     setGroups(newGroups);
     setViewMode('expert');
@@ -688,7 +778,26 @@ export default function App() {
               </div>
 
               {rooms.length > 0 && (
-                <div className="flex justify-center pb-12">
+                <div className="flex flex-col items-center justify-center pb-12 gap-6">
+                  <div className="bg-[#141414] p-1 rounded-xl border border-[#1a1a1a] flex inline-flex">
+                    <button 
+                      onClick={() => setBoardTier('economy')}
+                      className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${boardTier === 'economy' ? 'bg-[#00ff88] text-black shadow-[0_0_15px_rgba(0,255,136,0.2)]' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      ეკონომიური
+                    </button>
+                    <button 
+                      onClick={() => setBoardTier('premium')}
+                      className={`px-6 py-3 rounded-lg text-sm font-medium transition-all ${boardTier === 'premium' ? 'bg-[#00ff88] text-black shadow-[0_0_15px_rgba(0,255,136,0.2)]' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      პრემიუმი
+                    </button>
+                  </div>
+                  <div className="text-center text-xs text-zinc-500 max-w-md">
+                    {boardTier === 'economy' 
+                      ? 'აერთიანებს განათებებს და მშრალი ოთახების შტეფსელებს. არ შეიცავს ძაბვის რელეს. იდეალურია ბიუჯეტური პროექტებისთვის.' 
+                      : 'თითოეულ ოთახს აქვს ინდივიდუალური დაცვა. მოიცავს ძაბვის რელეს. მაქსიმალური კომფორტი და უსაფრთხოება.'}
+                  </div>
                   <button onClick={generateFromWizard} className="bg-[#00ff88] hover:bg-[#00cc6a] text-black font-semibold px-8 py-4 rounded-xl flex items-center gap-2 shadow-[0_0_30px_rgba(0,255,136,0.3)] transition-all hover:scale-105">
                     <Zap className="w-5 h-5" /> ფარის ავტომატური გენერაცია
                   </button>
