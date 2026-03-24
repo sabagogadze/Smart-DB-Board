@@ -5,8 +5,13 @@ import {
   Zap, Shield, Info, ShoppingCart, Flame,
   ChevronUp, ChevronDown, List, X,
   Sofa, BedDouble, Home, LayoutDashboard, Settings2, Minus,
-  GitMerge, Share2, Printer, Check
+  GitMerge, Share2, Printer, Check, ZoomIn, ZoomOut, Maximize
 } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { CircuitBreaker } from './components/CircuitBreaker';
+import RCBO_DS201 from './components/RCBO_DS201';
+import ZubrRelay from './components/ZubrRelay';
+import { DinRail } from './components/DinRail';
 
 type PointType = 'lighting' | 'socket' | 'appliance';
 
@@ -191,24 +196,145 @@ function generateModules(
   return modules;
 }
 
-const ModuleBlock = ({ 
-  module, 
-  onDragStart, 
-  onDrop, 
-  onDragOver 
-}: { 
+interface ModuleBlockProps {
   module: Module;
   onDragStart?: (e: React.DragEvent, id: string) => void;
   onDrop?: (e: React.DragEvent, id: string) => void;
   onDragOver?: (e: React.DragEvent) => void;
+}
+
+const MainCables: React.FC = () => {
+  return (
+    <div className="absolute -top-12 -left-20 w-[300px] h-[480px] pointer-events-none z-30 overflow-visible">
+      <svg width="100%" height="100%" viewBox="0 0 300 480" preserveAspectRatio="none" className="overflow-visible">
+        <defs>
+          <linearGradient id="cable-jacket" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#1a1a1a" />
+            <stop offset="50%" stopColor="#333333" />
+            <stop offset="100%" stopColor="#1a1a1a" />
+          </linearGradient>
+          <linearGradient id="brown-wire" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3e2723" />
+            <stop offset="50%" stopColor="#5d4037" />
+            <stop offset="100%" stopColor="#3e2723" />
+          </linearGradient>
+          <linearGradient id="blue-wire" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#0d47a1" />
+            <stop offset="50%" stopColor="#1e88e5" />
+            <stop offset="100%" stopColor="#0d47a1" />
+          </linearGradient>
+          <linearGradient id="ground-wire" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#fbc02d" />
+            <stop offset="50%" stopColor="#fdd835" />
+            <stop offset="100%" stopColor="#fbc02d" />
+          </linearGradient>
+          <linearGradient id="copper-tip" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#b87333" />
+            <stop offset="50%" stopColor="#cd7f32" />
+            <stop offset="100%" stopColor="#b87333" />
+          </linearGradient>
+          <filter id="wire-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+            <feOffset dx="3" dy="3" result="offsetblur" />
+            <feComponentTransfer>
+              <feFuncA type="linear" slope="0.5" />
+            </feComponentTransfer>
+            <feMerge>
+              <feMergeNode />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        
+        {/* Main Cable Jacket - Entering from top-left and running down the side */}
+        <path 
+          d="M 20,0 L 20,380 Q 20,430 60,430" 
+          stroke="url(#cable-jacket)" 
+          strokeWidth="28" 
+          fill="none" 
+          strokeLinecap="round"
+          className="drop-shadow-2xl"
+        />
+        
+        {/* Professional Cable Ties */}
+        <rect x="10" y="60" width="20" height="4" fill="#555" rx="1" />
+        <rect x="10" y="160" width="20" height="4" fill="#555" rx="1" />
+        <rect x="10" y="260" width="20" height="4" fill="#555" rx="1" />
+        
+        {/* Wires emerging from jacket at the bottom loop area */}
+        
+        {/* Phase (L) - Brown - Loops to bottom LEFT terminal (x=105) */}
+        <path 
+          d="M 60,430 C 60,410 60,360 105,315" 
+          stroke="url(#brown-wire)" 
+          strokeWidth="10" 
+          fill="none" 
+          strokeLinecap="round"
+          filter="url(#wire-shadow)"
+        />
+        {/* Terminal hole effect and Copper tip for L */}
+        <rect x="99" y="295" width="12" height="6" fill="#111" rx="1" />
+        <rect x="101" y="300" width="8" height="16" fill="url(#copper-tip)" rx="1" />
+        
+        {/* Neutral (N) - Blue - Loops to bottom RIGHT terminal (x=140) */}
+        <path 
+          d="M 60,430 C 100,430 140,410 140,315" 
+          stroke="url(#blue-wire)" 
+          strokeWidth="10" 
+          fill="none" 
+          strokeLinecap="round"
+          filter="url(#wire-shadow)"
+        />
+        {/* Terminal hole effect and Copper tip for N */}
+        <rect x="134" y="295" width="12" height="6" fill="#111" rx="1" />
+        <rect x="136" y="300" width="8" height="16" fill="url(#copper-tip)" rx="1" />
+        
+        {/* Ground (PE) - Yellow/Green - Goes to the side/top */}
+        <path 
+          d="M 60,430 C 40,430 10,400 10,300" 
+          stroke="url(#ground-wire)" 
+          strokeWidth="10" 
+          fill="none" 
+          strokeLinecap="round"
+          filter="url(#wire-shadow)"
+        />
+        <path 
+          d="M 60,430 C 40,430 10,400 10,300" 
+          stroke="#43a047" 
+          strokeWidth="10" 
+          fill="none" 
+          strokeDasharray="14,14"
+          strokeLinecap="round"
+        />
+      </svg>
+      
+      {/* Label at the top entry */}
+      <div className="absolute -top-6 left-0 bg-zinc-900/90 px-2 py-1 rounded border border-zinc-700 backdrop-blur-sm shadow-xl">
+        <span className="text-[10px] font-bold text-[#00ff88] tracking-widest uppercase">Main Supply 3x10mm²</span>
+      </div>
+    </div>
+  );
+};
+
+const ModuleBlock: React.FC<ModuleBlockProps> = ({ 
+  module, 
+  onDragStart, 
+  onDrop, 
+  onDragOver 
 }) => {
-  const width = module.modulesCount * 44; // 44px per module
+  const widthClass = {
+    1: 'w-[56px] md:w-[80px]',
+    2: 'w-[112px] md:w-[160px]',
+    3: 'w-[168px] md:w-[240px]',
+    4: 'w-[224px] md:w-[320px]',
+  }[module.modulesCount] || 'w-[80px]';
   
   const isDiff = module.type === 'rcbo';
   const isMain = module.type === 'main';
   const isRelay = module.type === 'relay';
   const isRccb = module.type === 'rccb';
   const isFixed = ['main', 'relay', 'rccb'].includes(module.id);
+  const isBreaker = module.type === 'mcb' || module.type === 'rcbo' || module.type === 'main';
 
   let bgColor = 'bg-[#141414]';
   let borderColor = 'border-[#2a2a2a]';
@@ -237,25 +363,91 @@ const ModuleBlock = ({
     textColor = 'text-purple-200';
   }
 
+  if (module.type === 'main' || module.type === 'mcb') {
+    return (
+      <div 
+        draggable={!isFixed}
+        onDragStart={(e) => { if (!isFixed && onDragStart) onDragStart(e, module.id); }}
+        onDrop={(e) => { if (!isFixed && onDrop) onDrop(e, module.id); }}
+        onDragOver={(e) => { if (!isFixed) { e.preventDefault(); if (onDragOver) onDragOver(e); } }}
+        className={`relative flex flex-col items-center justify-end h-[238px] md:h-[340px] select-none z-10 hover:z-20 transition-transform hover:-translate-y-1 duration-300 ${!isFixed ? 'cursor-grab active:cursor-grabbing' : ''} ${widthClass}`}
+        title={module.description}
+      >
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform scale-[0.7] md:scale-100 origin-bottom">
+          <CircuitBreaker 
+            amperage={module.amperage.toString()} 
+            poles={module.poles}
+            type="C"
+            model={module.poles === 1 ? "SH 201" : "SH 202"}
+          />
+        </div>
+        <div className="absolute -bottom-16 md:-bottom-20 whitespace-nowrap text-[9px] md:text-xs text-zinc-400 font-medium rotate-90 origin-left translate-x-2">
+          {module.name}
+        </div>
+      </div>
+    );
+  }
+
+  if (module.type === 'relay') {
+    return (
+      <div 
+        draggable={!isFixed}
+        onDragStart={(e) => { if (!isFixed && onDragStart) onDragStart(e, module.id); }}
+        onDrop={(e) => { if (!isFixed && onDrop) onDrop(e, module.id); }}
+        onDragOver={(e) => { if (!isFixed) { e.preventDefault(); if (onDragOver) onDragOver(e); } }}
+        className={`relative flex flex-col items-center justify-end h-[238px] md:h-[340px] select-none z-10 hover:z-20 transition-transform hover:-translate-y-1 duration-300 ${!isFixed ? 'cursor-grab active:cursor-grabbing' : ''} ${widthClass}`}
+        title={module.description}
+      >
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform scale-[0.7] md:scale-100 origin-bottom">
+          <ZubrRelay />
+        </div>
+        <div className="absolute -bottom-16 md:-bottom-20 whitespace-nowrap text-[9px] md:text-xs text-zinc-400 font-medium rotate-90 origin-left translate-x-2">
+          {module.name}
+        </div>
+      </div>
+    );
+  }
+
+  if (module.type === 'rcbo') {
+    return (
+      <div 
+        draggable={!isFixed}
+        onDragStart={(e) => { if (!isFixed && onDragStart) onDragStart(e, module.id); }}
+        onDrop={(e) => { if (!isFixed && onDrop) onDrop(e, module.id); }}
+        onDragOver={(e) => { if (!isFixed) { e.preventDefault(); if (onDragOver) onDragOver(e); } }}
+        className={`relative flex flex-col items-center justify-end h-[238px] md:h-[340px] select-none z-10 hover:z-20 transition-transform hover:-translate-y-1 duration-300 ${!isFixed ? 'cursor-grab active:cursor-grabbing' : ''} ${widthClass}`}
+        title={module.description}
+      >
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform scale-[0.7] md:scale-100 origin-bottom">
+          <RCBO_DS201 amperage={module.amperage.toString()} />
+        </div>
+        <div className="absolute -bottom-16 md:-bottom-20 whitespace-nowrap text-[9px] md:text-xs text-zinc-400 font-medium rotate-90 origin-left translate-x-2">
+          {module.name}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div 
       draggable={!isFixed}
       onDragStart={(e) => { if (!isFixed && onDragStart) onDragStart(e, module.id); }}
       onDrop={(e) => { if (!isFixed && onDrop) onDrop(e, module.id); }}
       onDragOver={(e) => { if (!isFixed) { e.preventDefault(); if (onDragOver) onDragOver(e); } }}
-      className={`relative flex flex-col items-center justify-between h-36 border ${borderColor} ${bgColor} rounded-md shadow-lg transition-all hover:border-opacity-100 ${!isFixed ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''}`}
-      style={{ width: `${width}px` }}
+      className={`relative flex flex-col items-center justify-between h-[238px] md:h-[340px] border ${borderColor} ${bgColor} rounded-md shadow-[0_20px_35px_rgba(0,0,0,0.3),0_5px_15px_rgba(0,0,0,0.2)] z-10 hover:z-20 transition-all duration-300 hover:border-opacity-100 ${!isFixed ? 'cursor-grab active:cursor-grabbing hover:-translate-y-1' : ''} ${widthClass}`}
       title={module.description}
     >
-      <div className={`w-full h-1.5 ${accentColor} rounded-t-md opacity-90`} />
+      <div className={`w-full h-1 md:h-1.5 ${accentColor} rounded-t-md opacity-90 shrink-0`} />
       
-      <div className="w-5 h-8 bg-[#080808] rounded-sm mt-3 border border-[#2a2a2a] shadow-inner flex items-center justify-center">
-         <div className={`w-full h-1/2 ${isMain ? 'bg-[#00ff88]' : 'bg-red-500'} rounded-sm`} />
+      <div className="flex-1 flex items-center justify-center w-full">
+        <div className="w-6 h-8 md:w-8 md:h-12 bg-[#080808] rounded-sm border border-[#2a2a2a] shadow-inner flex items-center justify-center">
+           <div className={`w-full h-1/2 ${isMain ? 'bg-[#00ff88]' : 'bg-red-500'} rounded-sm`} />
+        </div>
       </div>
 
-      <div className="flex flex-col items-center text-center px-1 pb-3 w-full">
-        <span className={`text-[11px] font-mono font-bold leading-tight mt-2 ${textColor}`}>{module.amperage}A</span>
-        <span className="text-[9px] text-zinc-500 leading-tight truncate w-full mt-1 px-1">{module.name}</span>
+      <div className="flex flex-col items-center text-center px-1 pb-2 md:pb-4 w-full shrink-0">
+        <span className={`text-sm font-mono font-bold leading-tight ${textColor}`}>{module.amperage}A</span>
+        <span className="text-xs text-zinc-400 leading-tight truncate w-full mt-1 px-1">{module.name}</span>
       </div>
     </div>
   )
@@ -672,7 +864,7 @@ export default function App() {
           </div>
         </header>
 
-      <main className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+      <main className="flex-1 flex flex-col md:flex-row md:overflow-hidden overflow-y-auto">
         {viewMode === 'wizard' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-[#0a0a0a] custom-scrollbar">
             <div className="max-w-5xl mx-auto">
@@ -811,7 +1003,7 @@ export default function App() {
             <div className="w-full md:w-80 bg-[#0d0d0d] border-b md:border-b-0 md:border-r border-[#1a1a1a] flex flex-col md:h-full shrink-0 order-2 md:order-1">
               <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar">
                 <h2 className="text-[10px] md:text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 md:mb-4 px-2">ჯგუფების დამატება</h2>
-                <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-2">
                   {PREDEFINED_POINTS.map(point => (
                     <button
                       key={point.id}
@@ -823,7 +1015,7 @@ export default function App() {
                           <point.icon className="w-3 h-3 md:w-4 md:h-4" />
                         </div>
                         <div className="text-left">
-                          <div className="text-xs md:text-sm font-medium text-zinc-200 truncate max-w-[80px] md:max-w-none">{point.name}</div>
+                          <div className="text-xs md:text-sm font-medium text-zinc-200 truncate max-w-[120px] md:max-w-none">{point.name}</div>
                           <div className="text-[9px] md:text-xs text-zinc-500">{point.powerKw} kW {point.isWet && '• სველი'}</div>
                         </div>
                       </div>
@@ -836,39 +1028,91 @@ export default function App() {
 
             {/* Center - Visual Board */}
             <div className="w-full md:flex-1 flex flex-col md:h-full relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#111] via-[#080808] to-[#050505] order-1 md:order-2 min-h-[400px] md:min-h-0">
-              <div className="p-4 md:p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
-          <h2 className="text-base md:text-lg font-medium text-zinc-200">ვიზუალური ფარი</h2>
-          <div className="flex items-center gap-2 text-xs md:text-sm text-zinc-400">
-            <Shield className="w-3 h-3 md:w-4 md:h-4 text-[#00ff88]" />
-            <span>Type C დაცვა</span>
-          </div>
-        </div>
+              <TransformWrapper
+                initialScale={window.innerWidth < 768 ? 0.4 : 0.8}
+                minScale={0.1}
+                maxScale={2}
+                centerOnInit={true}
+                limitToBounds={false}
+                panning={{ disabled: true }}
+                wheel={{ wheelDisabled: true }}
+              >
+                {({ zoomIn, zoomOut, resetTransform, state }) => (
+                  <>
+                    <div className="p-4 md:p-6 flex justify-between items-center border-b border-[#1a1a1a] bg-[#080808]/80 backdrop-blur-md z-10">
+                      <h2 className="text-base md:text-lg font-medium text-zinc-200">ვიზუალური ფარი</h2>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1 bg-[#141414] border border-[#1a1a1a] rounded-lg p-1">
+                          <button 
+                            onClick={() => zoomOut()}
+                            className="p-1.5 hover:bg-[#1a1a1a] rounded-md text-zinc-400 hover:text-white transition-colors"
+                            title="Zoom Out"
+                          >
+                            <ZoomOut className="w-4 h-4" />
+                          </button>
+                          <span className="text-xs font-mono text-zinc-300 w-12 text-center">
+                            {Math.round((state?.scale || 1) * 100)}%
+                          </span>
+                          <button 
+                            onClick={() => resetTransform()}
+                            className="p-1.5 hover:bg-[#1a1a1a] rounded-md text-zinc-400 hover:text-white transition-colors"
+                            title="Reset Zoom"
+                          >
+                            <Maximize className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => zoomIn()}
+                            className="p-1.5 hover:bg-[#1a1a1a] rounded-md text-zinc-400 hover:text-white transition-colors"
+                            title="Zoom In"
+                          >
+                            <ZoomIn className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="hidden md:flex items-center gap-2 text-xs md:text-sm text-zinc-400">
+                          <Shield className="w-3 h-3 md:w-4 md:h-4 text-[#00ff88]" />
+                          <span>Type C დაცვა</span>
+                        </div>
+                      </div>
+                    </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 flex items-start justify-center custom-scrollbar min-h-[40vh] md:min-h-0">
-          {/* DIN Rail Container */}
-          <div className="w-full overflow-x-auto custom-scrollbar pb-6">
-            <div className="min-w-max bg-[#0d0d0d] border border-[#1a1a1a] rounded-2xl p-6 md:p-8 shadow-2xl mx-auto">
-              {rows.map((row, rowIndex) => (
-                <div key={rowIndex} className="relative flex justify-center w-full mb-8 last:mb-0">
-                  {/* DIN Rail Background Line for this row */}
-                  <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-4 bg-zinc-800/50 border-y border-zinc-700/50 rounded-sm z-0" />
-                  
-                  <div className="relative z-10 flex gap-[1px]">
-                    {row.map((m, i) => (
-                      <ModuleBlock 
-                        key={`${m.id}_${i}`} 
-                        module={m} 
-                        onDragStart={handleDragStart}
-                        onDrop={handleDrop}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                    <div className="flex-1 relative overflow-hidden flex items-center justify-center">
+                      {/* Subtle noise texture overlay for the dark background */}
+                      <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+                      
+                      <TransformComponent wrapperClass="!w-full !h-full" contentClass="!w-full !h-full flex items-center justify-center">
+                        <div className="min-w-max bg-[#f8f9fa] border border-gray-300 rounded-2xl p-6 md:p-8 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.3),0_0_15px_rgba(0,0,0,0.1),inset_0_2px_3px_rgba(255,255,255,1)] flex flex-col items-center m-auto">
+                          {rows.map((row, rowIndex) => (
+                            <div key={rowIndex} className={`relative flex flex-col items-center justify-center w-full min-w-[300px] md:min-w-[600px] mb-8 last:mb-0 h-[320px] md:h-[450px] bg-gradient-to-b from-[#cbd5e1] via-[#e2e8f0] to-[#cbd5e1] rounded-lg shadow-[inset_0_15px_25px_rgba(0,0,0,0.2),inset_0_2px_4px_rgba(0,0,0,0.3)] border border-gray-400 ${rowIndex === 0 ? 'overflow-visible' : 'overflow-hidden'}`}>
+                              
+                              {/* Decorative backplate ridges for 3D realism */}
+                              <div className="absolute top-0 bottom-0 left-12 w-8 border-x border-gray-400/40 bg-gray-300/30 shadow-[inset_2px_0_3px_rgba(255,255,255,0.6)] z-0"></div>
+                              <div className="absolute top-0 bottom-0 right-12 w-8 border-x border-gray-400/40 bg-gray-300/30 shadow-[inset_2px_0_3px_rgba(255,255,255,0.6)] z-0"></div>
+                              <div className="absolute top-0 bottom-0 left-32 w-2 border-x border-gray-400/30 bg-gray-300/20 z-0"></div>
+                              <div className="absolute top-0 bottom-0 right-32 w-2 border-x border-gray-400/30 bg-gray-300/20 z-0"></div>
+
+                              <DinRail />
+                              
+                              <div className="relative z-10 flex items-end gap-[1px]">
+                                {row.map((m, i) => (
+                                  <div key={`${m.id}_${i}`} className="relative">
+                                    {m.type === 'main' && <MainCables />}
+                                    <ModuleBlock 
+                                      module={m} 
+                                      onDragStart={handleDragStart}
+                                      onDrop={handleDrop}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </TransformComponent>
+                    </div>
+                  </>
+                )}
+              </TransformWrapper>
             </div>
-          </div>
-        </div>
-      </div>
 
             {/* Right Sidebar - Summary */}
             <div className="w-full md:w-96 bg-[#0d0d0d] border-t md:border-t-0 md:border-l border-[#1a1a1a] flex flex-col md:h-full shrink-0 order-3">
